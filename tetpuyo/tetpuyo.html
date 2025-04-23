@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TetPuyo</title>
+    <style>
+        canvas { border: 1px solid black; display: block; margin: 0 auto; }
+        #score { font-size: 24px; text-align: center; margin: 10px auto; }
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 10px auto;
+            flex-wrap: wrap;
+        }
+        #controls button {
+            width: 60px;
+            height: 60px;
+            font-size: 24px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        #controls button:active {
+            background-color: #ccc;
+        }
+        #btnUp {
+            width: 100px; /* Rotateボタンを少し広く */
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <canvas id="gameCanvas" width="240" height="480"></canvas>
+    <div id="controls">
+        <button id="btnLeft">⬅</button>
+        <button id="btnRight">➡</button>
+        <button id="btnDown">⬇</button>
+        <button id="btnUp">↩</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+
+        // 定数
+        const BLOCK_SIZE = 30;
+        const WIDTH = 8;
+        const HEIGHT = 16;
+        const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+        const LINE_POINTS = [0, 100, 300, 500, 800];
+        const PUYO_POINT = 10;
+
+        // テトリミノ定義
+        const TETROMINOS = [
+            { shape: [[1,1,1,1]], color: COLORS[0], rotations: 2 }, // I
+            { shape: [[1,1],[1,1]], color: COLORS[1], rotations: 1 }, // O
+            { shape: [[0,1,0],[1,1,1]], color: COLORS[2], rotations: 4 }, // T
+            { shape: [[0,1,1],[1,1,0]], color: COLORS[3], rotations: 2 }, // S
+            { shape: [[1,1,0],[0,1,1]], color: COLORS[4], rotations: 2 }, // Z
+            { shape: [[1,0,0],[1,1,1]], color: COLORS[0], rotations: 4 }, // J
+            { shape: [[0,0,1],[1,1,1]], color: COLORS[1], rotations: 4 }  // L
+        ];
+
+        // ゲーム状態
+        let board = Array(HEIGHT).fill().map(() => Array(WIDTH).fill({ color: null }));
+        let currentTetromino = null;
+        let position = { x: 0, y: 0 };
+        let score = 0;
+        let chainCount = 0;
+        let gameOver = false;
+
+        // テトリミノ生成
+        function newTetromino() {
+            const tetromino = TETROMINOS[Math.floor(Math.random() * TETROMINOS.length)];
+            const shape = tetromino.shape.map(row => row.slice());
+            const colors = shape.map(row => row.map(() => COLORS[Math.floor(Math.random() * COLORS.length)]));
+            currentTetromino = { shape, colors, rotations: tetromino.rotations };
+            position = { x: Math.floor((WIDTH - shape[0].length) / 2), y: 0 };
+            if (!canMove(0, 0)) {
+                gameOver = true;
+            }
+        }
+
+        // 移動可能判定
+        function canMove(dx, dy, shape = currentTetromino.shape) {
+            for (let y = 0; y < shape.length; y++) {
+                for (let x = 0; x < shape[y].length; x++) {
+                    if (shape[y][x]) {
+                        const newX = position.x + x + dx;
+                        const newY = position.y + y + dy;
+                        if (newX < 0 || newX >= WIDTH || newY >= HEIGHT || (newY >= 0 && board[newY][newX].color)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        // テトリミノ固定
+        function lockTetromino() {
+            for (let y = 0; y < currentTetromino.shape.length; y++) {
+                for (let x = 0; x < currentTetromino.shape[y].length; x++) {
+                    if (currentTetromino.shape[y][x]) {
+                        const boardY = position.y + y;
+                        const boardX = position.x + x;
+                        if (boardY >= 0) {
+                            board[boardY][boardX] = { color: currentTetromino.colors[y][x] };
+                        }
+                    }
+                }
+            }
+            chainCount = 0;
+            checkLineClear();
+        }
+
+        // ライン消去
+        function checkLineClear() {
+            let linesCleared = 0;
+            for (let y = HEIGHT - 1; y >= 0; y--) {
+                if (board[y].every(cell => cell.color)) {
+                    linesCleared++;
+                    board.splice(y, 1);
+                    board.unshift(Array(WIDTH).fill({ color: null }));
+                    y++;
+                }
+            }
+            if (linesCleared > 0) {
+                score += LINE_POINTS[linesCleared] * Math.pow(2, chainCount);
+                chainCount++;
+                updateScore();
+                setTimeout(checkPuyoClear, 500); // ぷよ消去チェック
+            } else {
+                checkPuyoClear();
+            }
+        }
+
+        // ぷよ消去
+        function checkPuyoClear() {
+            const visited = Array(HEIGHT).fill().map(() => Array(WIDTH).fill(false));
+            let groups = [];
+
+            function floodFill(x, y, color, group) {
+                if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT || visited[y][x] || board[y][x].color !== color) {
+                    return;
+                }
+                visited[y][x] = true;
+                group.push({ x, y });
+                floodFill(x + 1, y, color, group);
+                floodFill(x - 1, y, color, group);
+                floodFill(x, y + 1, color, group);
+                floodFill(x, y - 1, color, group);
+            }
+
+            for (let y = 0; y < HEIGHT; y++) {
+                for (let x = 0; x < WIDTH; x++) {
+                    if (!visited[y][x] && board[y][x].color) {
+                        const group = [];
+                        floodFill(x, y, board[y][x].color, group);
+                        if (group.length >= 4) {
+                            groups.push(group);
+                        }
+                    }
+                }
+            }
+
+            if (groups.length > 0) {
+                let puyoCount = 0;
+                const removedPuyos = [];
+                for (const group of groups) {
+                    puyoCount += group.length;
+                    for (const puyo of group) {
+                        removedPuyos.push(puyo);
+                        board[puyo.y][puyo.x] = { color: null };
+                    }
+                }
+                score += puyoCount * PUYO_POINT * Math.pow(2, chainCount);
+                chainCount++;
+                updateScore();
+                dropBlocks(removedPuyos); // 修正: removedPuyosを渡す
+                setTimeout(checkLineClear, 500);
+            } else {
+                newTetromino();
+            }
+        }
+
+        // ブロック落下
+        function dropBlocks(removedPuyos) {
+            // 消去されたぷよのx座標の集合を取得
+            const affectedColumns = [...new Set(removedPuyos.map(puyo => puyo.x))];
+
+            // 落下対象のブロックを収集
+            let fallingBlocks = [];
+            for (const x of affectedColumns) {
+                // 列内で最上位の消去されたぷよのy座標を取得
+                const minRemovedY = Math.min(...removedPuyos.filter(p => p.x === x).map(p => p.y));
+                // minRemovedYより上のブロックを収集
+                for (let y = 0; y < minRemovedY; y++) {
+                    if (board[y][x].color) {
+                        fallingBlocks.push({ x, y, color: board[y][x].color });
+                    }
+                }
+            }
+
+            // 落下処理
+            let canFall = true;
+            while (canFall && fallingBlocks.length > 0) {
+                // 次の位置をチェック
+                for (const block of fallingBlocks) {
+                    const newY = block.y + 1;
+                    if (newY >= HEIGHT) {
+                        // 底に衝突
+                        canFall = false;
+                        break;
+                    }
+                    if (board[newY][block.x].color && !fallingBlocks.some(b => b.x === block.x && b.y === newY)) {
+                        // 落下していないブロックに衝突
+                        canFall = false;
+                        break;
+                    }
+                }
+
+                if (canFall) {
+                    // ボードを更新
+                    for (const block of fallingBlocks) {
+                        board[block.y][block.x] = { color: null };
+                        board[block.y + 1][block.x] = { color: block.color };
+                        block.y += 1;
+                    }
+                }
+            }
+        }
+
+        // 回転
+        function rotateTetromino() {
+            const newShape = Array(currentTetromino.shape[0].length).fill().map(() => []);
+            const newColors = Array(currentTetromino.shape[0].length).fill().map(() => []);
+            for (let y = 0; y < currentTetromino.shape.length; y++) {
+                for (let x = 0; x < currentTetromino.shape[y].length; x++) {
+                    newShape[x][currentTetromino.shape.length - 1 - y] = currentTetromino.shape[y][x];
+                    newColors[x][currentTetromino.shape.length - 1 - y] = currentTetromino.colors[y][x];
+                }
+            }
+            if (canMove(0, 0, newShape)) {
+                currentTetromino.shape = newShape;
+                currentTetromino.colors = newColors;
+            }
+        }
+
+        // ハードドロップ
+        function hardDrop() {
+            let dy = 0;
+            while (canMove(0, dy + 1)) {
+                dy++;
+            }
+            position.y += dy;
+            lockTetromino();
+        }
+
+        // スコア更新
+        function updateScore() {
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+        // 描画
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // ボード描画
+            for (let y = 0; y < HEIGHT; y++) {
+                for (let x = 0; x < WIDTH; x++) {
+                    if (board[y][x].color) {
+                        ctx.fillStyle = board[y][x].color;
+                        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                    }
+                }
+            }
+            // テトリミノ描画
+            if (currentTetromino) {
+                for (let y = 0; y < currentTetromino.shape.length; y++) {
+                    for (let x = 0; x < currentTetromino.shape[y].length; x++) {
+                        if (currentTetromino.shape[y][x]) {
+                            ctx.fillStyle = currentTetromino.colors[y][x];
+                            ctx.fillRect((position.x + x) * BLOCK_SIZE, (position.y + y) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                        }
+                    }
+                }
+            }
+            // ゲームオーバー表示
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.fillText('Game Over', 50, canvas.height / 2);
+            }
+        }
+
+        // ゲームループ
+        let lastTime = 0;
+        function gameLoop(time) {
+            if (gameOver) return;
+            if (time - lastTime > 1000) {
+                if (canMove(0, 1)) {
+                    position.y++;
+                } else {
+                    lockTetromino();
+                }
+                lastTime = time;
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // キー入力
+        document.addEventListener('keydown', e => {
+            if (gameOver) return;
+            if (e.key === 'ArrowLeft' && canMove(-1, 0)) position.x--;
+            if (e.key === 'ArrowRight' && canMove(1, 0)) position.x++;
+            if (e.key === 'ArrowDown' && canMove(0, 1)) position.y++;
+            if (e.key === 'ArrowUp') rotateTetromino();
+            if (e.key === ' ') hardDrop();
+            draw();
+        });
+
+        // ボタン操作の共通ハンドラ
+        function handleButtonAction(action, event) {
+            if (event.type === 'touchstart') {
+                event.preventDefault();
+            }
+            if (gameOver) return;
+            switch (action) {
+                case 'left':
+                    if (canMove(-1, 0)) position.x--;
+                    break;
+                case 'right':
+                    if (canMove(1, 0)) position.x++;
+                    break;
+                case 'down':
+                    if (canMove(0, 1)) position.y++;
+                    break;
+                case 'up':
+                    rotateTetromino();
+                    break;
+                case 'drop':
+                    hardDrop();
+                    break;
+            }
+            draw();
+        }
+
+        // ボタンにイベントリスナーを設定
+        const buttons = [
+            { id: 'btnLeft', action: 'left' },
+            { id: 'btnRight', action: 'right' },
+            { id: 'btnDown', action: 'down' },
+            { id: 'btnUp', action: 'up' }
+        ];
+
+        buttons.forEach(({ id, action }) => {
+            const button = document.getElementById(id);
+            button.addEventListener('touchstart', e => handleButtonAction(action, e));
+            button.addEventListener('click', e => handleButtonAction(action, e));
+        });
+
+        // ゲーム開始
+        newTetromino();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

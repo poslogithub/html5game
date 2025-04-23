@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Doom風 2Dシューティングゲーム</title>
+    <style>
+        canvas {
+            border: 2px solid #fff;
+            background: #222;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #111;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // プレイヤーオブジェクト
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 20,
+            speed: 5,
+            color: 'blue'
+        };
+
+        // 敵の配列
+        let enemies = [];
+        const enemyRadius = 15;
+        const enemySpeed = 2;
+        const enemyColor = 'red';
+
+        // 弾の配列
+        let bullets = [];
+        const bulletRadius = 5;
+        const bulletSpeed = 10;
+        const bulletColor = 'yellow';
+
+        // キー入力の状態
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false
+        };
+
+        // キーイベントリスナー
+        document.addEventListener('keydown', (e) => {
+            if (e.key in keys) keys[e.key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) keys[e.key] = false;
+        });
+
+        // マウスクリックで射撃
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // プレイヤーからマウス方向への単位ベクトルを計算
+            const dx = mouseX - player.x;
+            const dy = mouseY - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const vx = (dx / distance) * bulletSpeed;
+            const vy = (dy / distance) * bulletSpeed;
+
+            // 弾を追加
+            bullets.push({
+                x: player.x,
+                y: player.y,
+                vx: vx,
+                vy: vy,
+                radius: bulletRadius,
+                color: bulletColor
+            });
+        });
+
+        // 敵をランダムに生成
+        function spawnEnemy() {
+            const side = Math.floor(Math.random() * 4); // 0: 上, 1: 右, 2: 下, 3: 左
+            let x, y;
+            switch (side) {
+                case 0: // 上
+                    x = Math.random() * canvas.width;
+                    y = -enemyRadius;
+                    break;
+                case 1: // 右
+                    x = canvas.width + enemyRadius;
+                    y = Math.random() * canvas.height;
+                    break;
+                case 2: // 下
+                    x = Math.random() * canvas.width;
+                    y = canvas.height + enemyRadius;
+                    break;
+                case 3: // 左
+                    x = -enemyRadius;
+                    y = Math.random() * canvas.height;
+                    break;
+            }
+            enemies.push({ x, y, radius: enemyRadius, color: enemyColor });
+        }
+
+        // ゲームループ
+        function gameLoop() {
+            // キャンバスをクリア
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // プレイヤーの移動
+            if (keys.ArrowUp && player.y - player.radius > 0) player.y -= player.speed;
+            if (keys.ArrowDown && player.y + player.radius < canvas.height) player.y += player.speed;
+            if (keys.ArrowLeft && player.x - player.radius > 0) player.x -= player.speed;
+            if (keys.ArrowRight && player.x + player.radius < canvas.width) player.x += player.speed;
+
+            // プレイヤーの描画
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.fill();
+            ctx.closePath();
+
+            // 敵の更新と描画
+            enemies.forEach((enemy, index) => {
+                // プレイヤーに向かって移動
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const vx = (dx / distance) * enemySpeed;
+                const vy = (dy / distance) * enemySpeed;
+                enemy.x += vx;
+                enemy.y += vy;
+
+                // 描画
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+                ctx.closePath();
+
+                // プレイヤーとの衝突判定
+                const playerDx = player.x - enemy.x;
+                const playerDy = player.y - enemy.y;
+                const playerDistance = Math.sqrt(playerDx * playerDx + playerDy * playerDy);
+                if (playerDistance < player.radius + enemy.radius) {
+                    alert('ゲームオーバー！');
+                    enemies = [];
+                    bullets = [];
+                    player.x = canvas.width / 2;
+                    player.y = canvas.height / 2;
+                }
+            });
+
+            // 弾の更新と描画
+            bullets.forEach((bullet, bulletIndex) => {
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+
+                // 画面外に出たら削除
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(bulletIndex, 1);
+                    return;
+                }
+
+                // 描画
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                ctx.fillStyle = bullet.color;
+                ctx.fill();
+                ctx.closePath();
+
+                // 敵との衝突判定
+                enemies.forEach((enemy, enemyIndex) => {
+                    const dx = bullet.x - enemy.x;
+                    const dy = bullet.y - enemy.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < bullet.radius + enemy.radius) {
+                        enemies.splice(enemyIndex, 1); // 敵を削除
+                        bullets.splice(bulletIndex, 1); // 弾を削除
+                    }
+                });
+            });
+
+            // ランダムに敵を生成
+            if (Math.random() < 0.02) spawnEnemy();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ゲーム開始
+        gameLoop();
+    </script>
+</body>
+</html>

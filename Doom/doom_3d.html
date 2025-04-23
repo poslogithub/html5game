@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Doom風 3Dシューティングゲーム</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #111;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // シーンの設定
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // プレイヤーの設定
+        camera.position.set(0, 1, 5); // プレイヤーの初期位置（高さ1でFPS視点）
+        const player = {
+            speed: 0.1,
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3()
+        };
+
+        // 床の作成
+        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2; // 床を水平に
+        scene.add(floor);
+
+/*         // 壁の作成（シンプルな境界）
+        const wallGeometry = new THREE.BoxGeometry(100, 10, 0.5);
+        const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
+        const walls = [
+            new THREE.Mesh(wallGeometry, wallMaterial), // 奥
+            new THREE.Mesh(wallGeometry, wallMaterial), // 手前
+            new THREE.Mesh(wallGeometry, wallMaterial), // 左
+            new THREE.Mesh(wallGeometry, wallMaterial)  // 右
+        ];
+        walls[0].position.set(0, 5, -50);
+        walls[1].position.set(0, 5, 50);
+        walls[2].position.set(-50, 5, 0);
+        walls[2].rotation.y = Math.PI / 2;
+        walls[3].position.set(50, 5, 0);
+        walls[3].rotation.y = Math.PI / 2;
+        walls.forEach(wall => scene.add(wall)); */
+
+        // マップデータの読み込みと解析
+        async function loadMap() {
+            const response = await fetch('map.txt'); // map.txtを読み込む
+            const mapData = await response.text();
+            const lines = mapData.split('\n'); // 行ごとに分割
+
+            const wallGeometry = new THREE.BoxGeometry(1, 10, 1); // 壁のサイズ
+            const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
+
+            lines.forEach((line, z) => {
+                [...line].forEach((char, x) => {
+                    if (char === '+') {
+                        // 壁を配置
+                        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                        wall.position.set(x - lines[0].length / 2, 5, z - lines.length / 2);
+                        scene.add(wall);
+                    } else if (char === '@') {
+                        // プレイヤーの初期位置
+                        camera.position.set(x - lines[0].length / 2, 1, z - lines.length / 2);
+                    }
+                });
+            });
+        }
+
+        // 敵の配列
+        const enemies = [];
+        const enemyGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const textureLoader = new THREE.TextureLoader();
+        const enemyTexture = textureLoader.load('enemy.png');
+        const enemyMaterial = new THREE.SpriteMaterial({ map: enemyTexture, transparent: true });
+
+        // 弾の配列
+        const bullets = [];
+        const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+
+        // マウス操作（左右の視点変更のみ）
+        let mouseX = 0;
+        let yaw = 0;
+        const sensitivity = 0.002;
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.movementX;
+            yaw -= mouseX * sensitivity; // 左右回転（ヨー）のみ
+            camera.rotation.set(0, yaw, 0); // ピッチを固定（上下回転なし）
+        });
+
+        // ポインターロック（マウスをキャプチャ）
+        renderer.domElement.addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+        });
+
+        // キー入力
+        const keys = { w: false, s: false, a: false, d: false };
+        document.addEventListener('keydown', (e) => {
+            if (e.key in keys) keys[e.key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) keys[e.key] = false;
+        });
+
+        // 射撃
+        document.addEventListener('click', () => {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+            bullet.position.copy(camera.position);
+            bullet.velocity = direction.clone().multiplyScalar(0.5); // 弾の速度
+            scene.add(bullet);
+            bullets.push(bullet);
+        });
+
+        // 敵の生成
+        function spawnEnemy() {
+            const enemy = new THREE.Sprite(enemyMaterial);
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 20 + Math.random() * 20;
+            enemy.position.set(
+                camera.position.x + Math.cos(angle) * distance,
+                1, // 高さは床から1で固定
+                camera.position.z + Math.sin(angle) * distance
+            );
+            enemy.scale.set(1, 1, 1); // スプライトのサイズ（元のボックスと同じ1x1）
+            scene.add(enemy);
+            enemies.push(enemy);
+        }
+
+        // ゲームループ
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // プレイヤーの移動
+            player.velocity.set(0, 0, 0);
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+            if (keys.w) player.velocity.add(forward);
+            if (keys.s) player.velocity.sub(forward);
+            if (keys.a) player.velocity.sub(right);
+            if (keys.d) player.velocity.add(right);
+            player.velocity.normalize().multiplyScalar(player.speed);
+            camera.position.add(player.velocity);
+
+            // 壁との簡易衝突判定
+            camera.position.x = Math.max(-49, Math.min(49, camera.position.x));
+            camera.position.z = Math.max(-49, Math.min(49, camera.position.z));
+
+            // 敵の移動
+            enemies.forEach((enemy, index) => {
+                const direction = camera.position.clone().sub(enemy.position).normalize();
+                enemy.position.add(direction.multiplyScalar(0.05)); // 敵の速度
+                enemy.position.y = 1; // 高さを固定
+
+                // プレイヤーとの衝突
+                if (camera.position.distanceTo(enemy.position) < 1.5) {
+                    alert('ゲームオーバー！');
+                    enemies.forEach(e => scene.remove(e));
+                    enemies.length = 0;
+                    bullets.forEach(b => scene.remove(b));
+                    bullets.length = 0;
+                    camera.position.set(0, 1, 5);
+                }
+            });
+
+            // 弾の移動と衝突判定
+            bullets.forEach((bullet, bulletIndex) => {
+                bullet.position.add(bullet.velocity);
+                // 画面外に出たら削除
+                if (bullet.position.distanceTo(camera.position) > 50) {
+                    scene.remove(bullet);
+                    bullets.splice(bulletIndex, 1);
+                    return;
+                }
+                // 敵との衝突
+                enemies.forEach((enemy, enemyIndex) => {
+                    if (bullet.position.distanceTo(enemy.position) < 1) {
+                        scene.remove(enemy);
+                        enemies.splice(enemyIndex, 1);
+                        scene.remove(bullet);
+                        bullets.splice(bulletIndex, 1);
+                    }
+                });
+            });
+
+            // 敵のランダム生成
+            if (Math.random() < 0.02) spawnEnemy();
+
+            renderer.render(scene, camera);
+        }
+
+        // ウィンドウリサイズ対応
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ゲーム開始
+        loadMap().then(() => {
+            animate(); // マップ読み込み後にゲームループを開始
+        });
+    </script>
+</body>
+</html>

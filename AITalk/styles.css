@@ -1,0 +1,77 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
+.container {
+  text-align: center;
+  position: relative;
+}
+
+.character {
+  margin-bottom: 20px;
+}
+
+#girlImage {
+  width: 200px; /* 画像サイズを調整 */
+  height: auto;
+}
+
+.speech-bubble {
+  position: relative;
+  background: #fff;
+  border: 2px solid #000;
+  border-radius: 10px;
+  padding: 15px;
+  height: 50px;
+  width: 300px;
+  margin: 0 auto 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 10px solid transparent;
+  border-top: 10px solid #000; /* 吹き出しの矢印（外枠） */
+}
+
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 10px solid transparent;
+  border-top: 10px solid #fff; /* 吹き出しの矢印（内側） */
+}
+
+#phrase {
+  font-size: 16px;
+  color: #333;
+  margin: 0;
+  line-height: 1.5;
+}
+
+button#generateBtn {
+  background-color: #ccc;
+  color: #333;
+  border: 2px solid #000;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button#generateBtn:hover {
+  background-color: #aaa;
+}

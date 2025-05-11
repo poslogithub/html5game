@@ -1,6 +1,6 @@
 // データの読み込み
 async function loadData() {
-  const files = ['nouns', 'verbs', 'adjectives', 'adverbs', 'places', 'situations', 'templates', 'reactions'];
+  const files = ['nouns', 'verbs', 'adjectives', 'adverbs', 'places', 'situations', 'conjunctions', 'templates', 'reactions'];
   const data = {};
   for (const file of files) {
     try {
@@ -33,7 +33,7 @@ function getRandomImage() {
 
 // フレーズ生成
 function generatePhrase(data) {
-  const endings = ['', 'よ', 'よね', 'んだ', 'って', 'んだって', 'らしいよ', 'みたい'];
+  const endings = ['', 'よ', 'よね', 'んだ', 'みたい'];
   const template = getRandomElement(data.templates);
   
   // プレースホルダーを置換
@@ -45,6 +45,8 @@ function generatePhrase(data) {
     .replace('{adverb}', getRandomElement(data.adverbs))
     .replace('{place}', getRandomElement(data.places))
     .replace('{situation}', getRandomElement(data.situations))
+    .replace('{conjunction}', getRandomElement(data.conjunctions))
+    .replace('{conjunction2}', getRandomElement(data.conjunctions))
     .replace('{ending}', getRandomElement(endings));
 }
 
